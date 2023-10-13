@@ -26,12 +26,14 @@
 #define CMD_RUN_TRIG	0x13
 #define CMD_PREPARE_MCU		0x14
 #define CMD_CHECK	0x15
+#define CMD_ENTER_BL	0x16
+
 
 
 #define ERR_MCU_TRIG_IN		0x80
 
 
-#define	REPLY_LOG	0xa5
+#define	REPLY_LOG	0x5a
 
 
 void log(const char* log_str, uint16_t len);
@@ -41,7 +43,7 @@ class Teensy_Cs
 	public:
 		Teensy_Cs(int trig_out, Cs_Target *target);
 		int trigger();
-		void set_delayNs(int delayNs){ this->delayNs = delayNs; }
+		void set_delayNs(unsigned int delayNs){ this->delayNs = delayNs; }
 		void set_widthNs(int widthNs){ this->widthNs = widthNs; }
 		void set_trig_in(int trig_in, bool trig_in_level, unsigned long trig_in_delay_muS);
 
@@ -74,7 +76,7 @@ class Teensy_Cs
 		Cs_Target *target;
 
 		int trig_out;
-		int delayNs;
+		unsigned int delayNs;
 		int widthNs;
 		int trig_in = 0; /* Possible trigger in to wait for */
 

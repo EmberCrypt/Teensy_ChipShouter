@@ -1,9 +1,10 @@
 import serial
 import logging
+import argparse
+
+from enum import Enum
 
 from time import sleep
-
-
 
 class Teensy_CS:
     '''
@@ -17,10 +18,12 @@ class Teensy_CS:
     CMD_RUN_TRIG    =   0x13
     CMD_PREPARE_TARGET  =   0x14
     CMD_CHECK       =   0x15
+    CMD_ENTER_BL    =   0x16
+
 
     ERR_TRIG_IN     =   0x80
 
-    REPLY_LOG       =   0xa5
+    REPLY_LOG       =   0x5a
 
 
     def __init__(self, log = 0):
@@ -38,7 +41,7 @@ class Teensy_CS:
     def set_delay(self, d):
         ''' Sets the glitch delay on the teensy '''
         self.teensy.write([self.CMD_SET_DELAY])
-        self.teensy.write(d.to_bytes(4, 'little'))
+        self.teensy.write(d.to_bytes(8, 'little'))
         _r = self.read(self.CMD_SET_DELAY)
 
     def run(self, trigger = 0, sync = 1):
@@ -72,6 +75,14 @@ class Teensy_CS:
         _r = self.read(self.CMD_PREPARE_TARGET)
         return _r
 
+    def teensy_enter_bl(self):
+        self.teensy.write([self.CMD_ENTER_BL])
+        return
+
+    def run_cmd(self, cmd):
+        self.teensy.write([cmd])
+        _r = self.read(cmd)
+        return _r
 
     def stop(self):
         self.teensy.write([self.CMD_STOP])
@@ -85,8 +96,9 @@ class Teensy_CS:
             if _b[0] == self.REPLY_LOG:
                 _len = int.from_bytes(self.teensy.read(2), 'big')
                 _msg = self.teensy.read(_len)
+                print(_msg)
                 if self.log:
-                    logging.debug(_msg)
+                    print(_msg.decode())
             _b = self.teensy.read(1)
         _b += self.teensy.read(1) # Return code
         _len = int.from_bytes(self.teensy.read(2), "big")
@@ -94,16 +106,42 @@ class Teensy_CS:
         return _b[1:] # strip off the command response byte
 
 
+class Actions(Enum):
+    ENTER_BL        =   "enter_bl"
+    RUN_NO_TRIG     =   "run_no_trig"
+    RUN             =   "run"
+
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format="%(filename)s:%(funcName)s: %(message)s")
+
+    parser = argparse.ArgumentParser(description='Teensy Chipshouter control')
+
+    parser.add_argument("--pulse_width", dest = "width", default = 100, help = "Pulse width (in ns)")
+    parser.add_argument("--pulse_delay", dest = "delay", default = 220000, help = "Pulse delay (in ns)")
+
+    subparsers = parser.add_subparsers(help = "Specific command to execute", dest = "action")
+    subparsers.add_parser(Actions.ENTER_BL.value, help = "Resets teensy into the bootloader interface")
+    subparsers.add_parser(Actions.RUN.value, help = "Runs the glitching process (with trigger)")
+    subparsers.add_parser(Actions.RUN_NO_TRIG.value, help = "Runs the glitching process (no trigger)")
+
+    args = parser.parse_args()
+
     cs = Teensy_CS(log = 1)
-    cs.set_pulse_width(100)
-    cs.set_delay(4500000) # start time
-    delay_start =  100000
-    for delay in range(delay_start, 5000000, 1000):
-        cs.set_delay(delay) # start time
-        cs.setup_target()
-        _r = cs.run(1)
-        print(_r)
-        _r = cs.check()
-        print(_r)
+
+    cs.set_delay(args.delay)
+    cs.set_pulse_width(args.width)
+
+    if args.action == Actions.RESET_TEENSY.value:
+        _r = cs.teensy_enter_bl()
+    else:
+        _r = cs.setup_target()
+        if args.action == Actions.RUN.value:
+            logging.info("Running & triggering the teensy...")
+            _r = cs.run(1)
+        elif args.action == Actions.RUN_NO_TRIG.value:
+            logging.info("Running the teensy (no trigger)...")
+            _r = cs.run(0)
+
+    logging.info(_r)

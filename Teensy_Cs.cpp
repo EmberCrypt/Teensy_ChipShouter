@@ -1,7 +1,8 @@
 #include "Teensy_Cs.h"
 
 
-char log_buf[0x1000];
+// TODO get log_buf alright
+char log_buf[0x40000];
 
 
 
@@ -93,7 +94,7 @@ void Teensy_Cs::run(){
 	int ret = 0;
 	int cmd = 0;
 	char in[0x100] = {0};
-	uint8_t ret_data[0x2000] = {0};
+	uint8_t ret_data[0x11000] = {0};
 	this->target->setup();
 	while(1){
 		while(!Serial);
@@ -101,36 +102,47 @@ void Teensy_Cs::run(){
 		if(cmd != -1){
 			ret_len = 0;
 			memset(ret_data, 0, 0x20);
-			switch(cmd){
-				case CMD_SET_WIDTH:
-					Serial.readBytes(in, 4); // New width sent in little endian order
-					this->set_widthNs(*((int*) in));
-					sprintf(log_buf, "Setting width %d", this->widthNs);
-					log(log_buf, strlen(log_buf));
-					break;
-				case CMD_SET_DELAY:
-					Serial.readBytes(in, 4); // New width sent in little endian order
-					this->set_delayNs(*((int*) in));
-					sprintf(log_buf, "Setting delay %d", this->delayNs);
-					log(log_buf, strlen(log_buf));
-					break;
-				case CMD_RUN:
-					ret = this->run_target(0, ret_data, &ret_len);
-					break;
-				case CMD_CHECK:
-					this->target->check(ret_data, &ret_len);
-					break;
-				case CMD_RUN_TRIG:
-					ret = this->run_target(1, ret_data, &ret_len);
-					break;
-				case CMD_STOP:
-					return;
-				case CMD_PREPARE_MCU:
-					ret = this->target->prepare_target();
-					break;
-				default:
-					sprintf(log_buf, "[%02X] unknown command byte", cmd);
-					log(log_buf, strlen(log_buf));
+			/*
+			 * For special commands we let the submodule process it
+			 */
+			if(cmd > 0x20){
+				ret = this->target->process_cmd(cmd, ret_data, &ret_len);
+			}
+			else{
+				switch(cmd){
+					case CMD_SET_WIDTH:
+						Serial.readBytes(in, 4); // New width sent in little endian order
+						this->set_widthNs(*((int*) in));
+						sprintf(log_buf, "Setting width %d", this->widthNs);
+						log(log_buf, strlen(log_buf));
+						break;
+					case CMD_SET_DELAY:
+						Serial.readBytes(in, 8); // New width sent in little endian order
+						this->set_delayNs(*((unsigned int*) in));
+						sprintf(log_buf, "Setting delay %d", this->delayNs);
+						log(log_buf, strlen(log_buf));
+						break;
+					case CMD_RUN:
+						ret = this->run_target(0, ret_data, &ret_len);
+						break;
+					case CMD_CHECK:
+						this->target->check(ret_data, &ret_len);
+						break;
+					case CMD_RUN_TRIG:
+						ret = this->run_target(1, ret_data, &ret_len);
+						break;
+					case CMD_STOP:
+						return;
+					case CMD_PREPARE_MCU:
+						ret = this->target->prepare_target();
+						break;
+					case CMD_ENTER_BL:
+						asm("bkpt #251"); // run bootloader
+						break;
+					default:
+						sprintf(log_buf, "[%02X] unknown command byte", cmd);
+						log(log_buf, strlen(log_buf));
+				}
 			}
 			Serial.write(cmd | 0x80);
 			Serial.write(ret);

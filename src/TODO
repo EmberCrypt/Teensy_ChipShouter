@@ -1,0 +1,4 @@
+- get coords in xyz stage
+- genetic / reinforcement learning algorithm
+- incorporate teensy-uds here
+- find way to easily store and load glitch parameters
